@@ -1,23 +1,25 @@
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
+
 const app = express();
 const PORT = 5000;
+const uploadsDir = path.join(__dirname, 'uploads');
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
 
-// In-memory store for events
-let events = [];
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
 
-// Multer storage config
+// Configure Multer
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, './uploads');
-  },
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${file.originalname}`;
     cb(null, uniqueName);
@@ -25,79 +27,70 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ✅ Add Event
-app.post('/event', upload.single('media'), (req, res) => {
-  const { title, date, description } = req.body;
-  const media = req.file ? `/uploads/${req.file.filename}` : null;
 
-  if (!title || !date || !description) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  const newEvent = {
-    id: Date.now().toString(),
-    title,
-    date,
-    description,
-    media
-  };
-
-  events.push(newEvent);
-  res.status(201).json({ message: 'Event created', event: newEvent });
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
 });
 
-// ✏️ Edit Event
-app.put('/event/:id', upload.single('media'), (req, res) => {
-  const { id } = req.params;
-  const { title, date, description } = req.body;
-
-  const index = events.findIndex(e => e.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Event not found' });
-  }
-
-  // If new file is uploaded, delete old one
-  if (req.file && events[index].media) {
-    const oldPath = path.join(__dirname, events[index].media);
-    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-  }
-
-  events[index] = {
-    ...events[index],
-    title: title || events[index].title,
-    date: date || events[index].date,
-    description: description || events[index].description,
-    media: req.file ? `/uploads/${req.file.filename}` : events[index].media
-  };
-
-  res.json({ message: 'Event updated', event: events[index] });
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend is working!' });
 });
 
-// ❌ Delete Event
-app.delete('/event/:id', (req, res) => {
-  const { id } = req.params;
-  const index = events.findIndex(e => e.id === id);
+// 🔍 GET all media
+app.get('/api/media', (req, res) => {
+  fs.readdir(uploadsDir, (err, files) => {
+    if (err) return res.status(500).json({ error: 'Error reading files' });
 
-  if (index === -1) {
-    return res.status(404).json({ error: 'Event not found' });
-  }
+    const media = files.map((filename, index) => {
+      const ext = path.extname(filename).toLowerCase();
+      const type = ['.mp4', '.mov', '.avi'].includes(ext) ? 'video' : 'image';
 
-  // Delete media file if exists
-  const mediaPath = path.join(__dirname, events[index].media || '');
-  if (events[index].media && fs.existsSync(mediaPath)) {
-    fs.unlinkSync(mediaPath);
-  }
+      return {
+        _id: index.toString(), // simulate an ID
+        url: `http://localhost:${PORT}/uploads/${filename}`,
+        type,
+        caption: '', // placeholder
+        filePath: filename,
+      };
+    });
 
-  const deletedEvent = events.splice(index, 1);
-  res.json({ message: 'Event deleted', event: deletedEvent[0] });
+    res.json(media);
+  });
 });
 
-// 📄 Get All Events
-app.get('/events', (req, res) => {
-  res.json(events);
+// 📤 POST upload media
+app.post('/api/media/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const ext = path.extname(req.file.filename).toLowerCase();
+  const type = ['.mp4', '.mov', '.avi'].includes(ext) ? 'video' : 'image';
+
+  const caption = req.body.caption || '';
+
+  res.json({
+    _id: Date.now().toString(),
+    url: `http://localhost:${PORT}/uploads/${req.file.filename}`,
+    type,
+    caption,
+    filePath: req.file.filename
+  });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+// 🗑️ POST delete media
+app.post('/api/media/delete', (req, res) => {
+  const { filePath } = req.body;
+
+  if (!filePath) return res.status(400).json({ error: 'No filePath provided' });
+
+  const fullPath = path.join(uploadsDir, filePath);
+  fs.unlink(fullPath, err => {
+    if (err) return res.status(500).json({ error: 'Error deleting file' });
+
+    res.json({ success: true });
+  });
 });
+
+app.listen(PORT, () =>
+  console.log(`✅ Server running at http://localhost:${PORT}`)
+);
