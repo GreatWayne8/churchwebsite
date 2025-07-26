@@ -12,6 +12,9 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 
+
+let events = [];
+
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
@@ -33,6 +36,18 @@ app.use((req, res, next) => {
   next();
 });
 
+app.post('/api/events', (req, res) => {
+  const { title, date, description } = req.body;
+  if (!title || !date || !description) {
+    return res.status(400).json({ success: false, message: 'All fields required' });
+  }
+  events.push({ title, date, description });
+  res.json({ success: true });
+});
+
+app.get('/api/events', (req, res) => {
+  res.json(events);
+});
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is working!' });
 });
