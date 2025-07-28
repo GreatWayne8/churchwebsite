@@ -200,6 +200,19 @@ app.get('/api/media/:category', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// GET /api/categories
+app.get('/api/categories', (req, res) => {
+  const categories = [
+    'Stressed',
+    'Lonely',
+    'Anxious',
+    'Encouraged',
+    'Hopeful',
+    'Other'
+  ];
+  res.json(categories);
+});
+
 
 // 📌 Delete media
 app.post('/api/media/delete', async (req, res) => {
