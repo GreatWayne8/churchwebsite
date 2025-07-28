@@ -1,11 +1,13 @@
 # Backend Documentation
 
 ## Overview
-This is the backend of the Node.js and React application. It serves as the server-side component, handling requests and managing data.
+
+This is the backend of the Node.js and React application. It serves as the server-side component, handling requests and managing data. for a church
 
 ## Setup Instructions
 
 1. **Clone the Repository**
+
    ```bash
    git clone <repository-url>
    cd my-node-react-app/backend
@@ -13,18 +15,28 @@ This is the backend of the Node.js and React application. It serves as the serve
 
 2. **Install Dependencies**
    Run the following command to install the necessary packages:
+
    ```bash
    npm install
    ```
 
 3. **Run the Application**
    Start the server with:
+
    ```bash
-   npm start
-   ```
+
+      node server.js   ```
+
+5. **RUN MONGO DB VIA DOCKER**
+
+```docker run -d \
+  --name dmi-mongo \
+  -p 27017:27017 \
+  -v dmi-mongo-data:/data/db \
+  mongo```
 
 ## Usage
-The backend server will be running on `http://localhost:3000` by default. You can access the API endpoints defined in the application.
+The backend server will be running on `http://localhost:5000` by default. You can access the API endpoints defined in the application.
 
 ## API Endpoints
 - **GET /api/example**: Description of what this endpoint does.

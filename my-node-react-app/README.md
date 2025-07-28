@@ -1,6 +1,14 @@
-# My Node and React App
+**🎬 DMI Church Encouragement Media App**
+**📖 Overview**
+This project is a full-stack application developed for DMI Church to help uplift and encourage church members through categorized media content — including videos and audios.
 
-This project is a full-stack application built with Node.js for the backend and React for the frontend. 
+It is designed to allow users to:
+
+Browse by emotional/spiritual categories (e.g., Joy, Peace, Faith)
+
+Watch or listen to encouraging content
+
+Upload videos and audios through an admin interface
 
 ## Project Structure
 
@@ -21,6 +29,29 @@ my-node-react-app
 │   └── README.md             # Documentation for the frontend
 └── README.md                 # Overall documentation for the project
 ```
+
+
+**🚀 Features**
+✅ Upload audio/video media with category and caption
+
+✅ Dynamically fetch and filter media by category
+
+✅ Stream videos and audios directly in the browser
+
+✅ Clean and mobile-friendly UI
+
+✅ Automatically handles media preview and rendering
+
+📸 Screenshots
+🔹 Home Page
+![alt text](image.png)
+🔹 Upload Form
+Admin interface to upload new encouragement videos or audios
+![alt text](image-1.png)
+🔹 Video Player
+Media playback experience
+![alt text](image-2.png)
+
 
 ## Getting Started
 
@@ -62,6 +93,8 @@ my-node-react-app
    npm start
    ```
 
+### 🙏 Acknowledgments
+This project was built to serve the DMI Church community, with the aim of providing encouragement, hope, and inspiration through media.
 ## Usage
 
 - Access the backend API at `http://localhost:5000` (or the port specified in your backend configuration).
