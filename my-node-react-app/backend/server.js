@@ -32,7 +32,9 @@ const mediaSchema = new mongoose.Schema({
   url: String,
   type: String,
   caption: String,
-  filePath: String
+  filePath: String,
+  category: String // 👈 Add this!
+
 });
 
 const Event = mongoose.model('Event', eventSchema);
@@ -162,17 +164,29 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ext = path.extname(req.file.filename).toLowerCase();
-  const type = ['.mp4', '.mov', '.avi'].includes(ext) ? 'video' : 'image';
+  const type = ['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext) ? 'video' : 'audio';
   const caption = req.body.caption || '';
+  const category = req.body.category || 'Uncategorized'; // 👈 Default fallback
   const filePath = req.file.filename;
   const url = `http://localhost:${PORT}/uploads/${filePath}`;
 
   try {
-    const mediaItem = await Media.create({ url, type, caption, filePath });
+    const mediaItem = await Media.create({ url, type, caption, filePath, category });
     res.json(mediaItem);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to save media' });
+  }
+});
+
+// Get all media under a category (caption group)
+app.get('/api/media/:category', async (req, res) => {
+  try {
+    const category = req.params.category;
+    const media = await Media.find({ category });
+    res.json(media);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
