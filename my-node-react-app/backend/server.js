@@ -164,7 +164,18 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ext = path.extname(req.file.filename).toLowerCase();
-  const type = ['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext) ? 'video' : 'audio';
+  let type = 'unknown';
+
+  if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) {
+    type = 'video';
+  } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
+    type = 'audio';
+  } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].includes(ext)) {
+    type = 'image';
+  }
+  if (type === 'unknown') {
+    return res.status(400).json({ error: 'Unsupported file type' });
+  }
   const caption = req.body.caption || '';
   const category = req.body.category || 'Uncategorized'; // 👈 Default fallback
   const filePath = req.file.filename;
