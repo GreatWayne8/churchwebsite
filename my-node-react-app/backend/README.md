@@ -7,7 +7,6 @@ This is the backend of the Node.js and React application. It serves as the serve
 ## Setup Instructions
 
 1. **Clone the Repository**
-
    ```bash
 gh repo clone GreatWayne8/churchwebsite
 cd my-node-react-app/backend
