@@ -10,6 +10,8 @@ const PORT = 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
 
 // Middleware
+app.use(express.urlencoded({ extended: true }));
+
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
@@ -28,12 +30,13 @@ const eventSchema = new mongoose.Schema({
   description: String
 });
 // ✅ Team Schema
+
 const teamSchema = new mongoose.Schema({
   name: String,
   title: String,
   image: String,
   bio: String
-});
+}, { timestamps: true });
 
 const TeamMember = mongoose.model('TeamMember', teamSchema);
 
@@ -241,32 +244,43 @@ app.post('/api/media/delete', async (req, res) => {
   }
 });
 // 📌 Get all team members
+// ✅ GET /api/team
 app.get('/api/team', async (req, res) => {
   try {
-    const team = await TeamMember.find().sort({ name: 1 });
-    res.json(team);
+    const team = await TeamMember.find().sort({ createdAt: 1 });
+    res.json(team); // ✅ this must be a plain array
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch team members' });
+    res.status(500).json({ message: err.message });
   }
 });
 
 // 📌 Add a team member
-app.post('/api/team', async (req, res) => {
-  try {
-    const { name, title, image, bio } = req.body;
+app.post('/api/team', upload.single('image'), async (req, res) => {
+  console.log('BODY:', req.body);
+console.log('FILE:', req.file);
 
-    if (!name || !title || !image || !bio) {
-      return res.status(400).json({ error: 'All fields are required' });
+  try {
+    const { name, title, bio } = req.body;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : ''; // Optional image
+
+    if (!name || !title || !bio) {
+      return res.status(400).json({ error: 'Name, title and bio are required' });
     }
 
-    const newMember = new TeamMember({ name, title, image, bio });
+    const newMember = new TeamMember({
+      name,
+      title,
+      image: imagePath,
+      bio,
+    });
+
     await newMember.save();
     res.status(201).json(newMember);
   } catch (err) {
+    console.error('Team upload error:', err);
     res.status(500).json({ error: 'Error saving team member' });
   }
 });
-
 // 📌 Delete a team member
 app.delete('/api/team/:id', async (req, res) => {
   try {
