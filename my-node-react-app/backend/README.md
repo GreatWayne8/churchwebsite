@@ -7,12 +7,11 @@ This is the backend of the Node.js and React application. It serves as the serve
 ## Setup Instructions
 
 1. **Clone the Repository**
-
    ```bash
-   git clone <repository-url>
+   gh repo clone GreatWayne8/churchwebsite
    cd my-node-react-app/backend
-   ```
 
+   ```
 2. **Install Dependencies**
    Run the following command to install the necessary packages:
 
