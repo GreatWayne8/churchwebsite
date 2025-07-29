@@ -50,7 +50,7 @@ Admin interface to upload new encouragement videos or audios
 ![alt text](image-1.png)
 🔹 Video Player
 Media playback experience
-![alt text](image-2.png)
+
 
 
 ## Getting Started

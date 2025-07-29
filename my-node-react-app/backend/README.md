@@ -30,10 +30,11 @@ This is the backend of the Node.js and React application. It serves as the serve
 5. **RUN MONGO DB VIA DOCKER**
 
 ```docker run -d \
-  --name dmi-mongo \
+  --name mongodb \
   -p 27017:27017 \
-  -v dmi-mongo-data:/data/db \
-  mongo```
+  -v mongodata:/data/db \
+  mongo
+```
 
 ## Usage
 The backend server will be running on `http://localhost:5000` by default. You can access the API endpoints defined in the application.

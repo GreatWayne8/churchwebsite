@@ -27,6 +27,15 @@ const eventSchema = new mongoose.Schema({
   date: String,
   description: String
 });
+// ✅ Team Schema
+const teamSchema = new mongoose.Schema({
+  name: String,
+  title: String,
+  image: String,
+  bio: String
+});
+
+const TeamMember = mongoose.model('TeamMember', teamSchema);
 
 const mediaSchema = new mongoose.Schema({
   url: String,
@@ -229,6 +238,44 @@ app.post('/api/media/delete', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Error deleting media' });
+  }
+});
+// 📌 Get all team members
+app.get('/api/team', async (req, res) => {
+  try {
+    const team = await TeamMember.find().sort({ name: 1 });
+    res.json(team);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
+// 📌 Add a team member
+app.post('/api/team', async (req, res) => {
+  try {
+    const { name, title, image, bio } = req.body;
+
+    if (!name || !title || !image || !bio) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const newMember = new TeamMember({ name, title, image, bio });
+    await newMember.save();
+    res.status(201).json(newMember);
+  } catch (err) {
+    res.status(500).json({ error: 'Error saving team member' });
+  }
+});
+
+// 📌 Delete a team member
+app.delete('/api/team/:id', async (req, res) => {
+  try {
+    const deleted = await TeamMember.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Team member not found' });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete member' });
   }
 });
 
