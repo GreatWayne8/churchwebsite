@@ -26,14 +26,10 @@ This is the backend of the Node.js and React application. It serves as the serve
 
       node server.js   ```
 
-5. **RUN MONGO DB VIA DOCKER**
-
-```docker run -d \
-  --name mongodb \
-  -p 27017:27017 \
-  -v mongodata:/data/db \
-  mongo
-```
+5. **RUN postgress **
+sudo service postgresql start
+psql -U postgres
+\c dmi
 
 ## Usage
 The backend server will be running on `http://localhost:5000` by default. You can access the API endpoints defined in the application.
