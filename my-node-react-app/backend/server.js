@@ -11,6 +11,7 @@ const { initiateStkPush } = require('./mpesa');
 const app = express();
 const PORT = 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
+const stripe = require('stripe')('sk_test_51RsrPAPLkGrqoiEnxcEvS8iBg5tBWMmI1lwa1KYdyeP7wYAC9KPUybFqFMOLjbhzkEXS23CJCPBh1l7j1A5jNE4m00Ec1cCOAp');
 
 // ✅ PostgreSQL connection
 const pool = new Pool({
@@ -348,6 +349,68 @@ app.post('/api/daraja/callback', (req, res) => {
   res.status(200).send('OK');
 });
 
+app.post('/api/stripe-checkout', async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'kes',
+          product_data: {
+            name: 'Donation',
+          },
+          unit_amount: amount * 100, // Stripe uses cents
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: 'http://localhost:3000/success',
+      cancel_url: 'http://localhost:3000/cancel',
+    });
+
+    res.json({ checkoutUrl: session.url });
+  } catch (error) {
+    console.error('Stripe error:', error);
+    res.status(500).json({ message: 'Stripe checkout failed.' });
+  }
+});
+
+app.post('/create-payment-intent', async (req, res) => {
+  const { amount } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount, // in cents: e.g., 1000 = $10.00
+      currency: 'usd',
+      payment_method_types: ['card'],
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/api/stripe-donate', async (req, res) => {
+  const { amount } = req.body;
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: parseInt(amount) * 100, // Stripe accepts amount in cents
+      currency: 'kes', // Use 'usd' if KES is not enabled on your Stripe account
+      payment_method_types: ['card'],
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    console.error('Stripe Error:', error);
+    res.status(500).send({ error: error.message });
+  }
+});
 // ✅ Start Server
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
