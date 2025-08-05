@@ -1,73 +1,47 @@
+// 📦 Dependencies
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const mongoose = require('mongoose');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
 
-// Middleware
-app.use(express.urlencoded({ extended: true }));
+// ✅ PostgreSQL connection
+const pool = new Pool({
+  user: 'postgres', // ✅ change if needed
+  host: 'localhost',
+  database: 'dmi',
+  password: 'your_secure_password', // ✅ replace with your password
+  port: 5432,
+});
 
+pool.connect()
+  .then(() => console.log('✅ Connected to PostgreSQL'))
+  .catch(err => console.error('❌ PostgreSQL connection error:', err));
+
+// ✅ Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(uploadsDir));
-
-// ✅ MongoDB connection
-mongoose.connect('mongodb://localhost:27017/dmi', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
-
-// ✅ Mongoose Schemas
-const eventSchema = new mongoose.Schema({
-  title: String,
-  date: String,
-  description: String
-});
-// ✅ Team Schema
-
-const teamSchema = new mongoose.Schema({
-  name: String,
-  title: String,
-  image: String,
-  bio: String
-}, { timestamps: true });
-
-const TeamMember = mongoose.model('TeamMember', teamSchema);
-
-const mediaSchema = new mongoose.Schema({
-  url: String,
-  type: String,
-  caption: String,
-  filePath: String,
-  category: String // 👈 Add this!
-
-});
-
-const Event = mongoose.model('Event', eventSchema);
-const Media = mongoose.model('Media', mediaSchema);
 
 // ✅ Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
-// ✅ Configure Multer
+// ✅ Multer Setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
-  }
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });
 
-// ✅ Logger Middleware
+// ✅ Simple logger
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
@@ -78,222 +52,252 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is working!' });
 });
 
-// 📌 Create new event
+// 📌 Event Routes
 app.post('/api/events', async (req, res) => {
+  const { title, description, date } = req.body;
+  if (!title || !description || !date) return res.status(400).json({ error: 'Missing required fields' });
+
   try {
-    const { title, description, date } = req.body;
-
-    if (!title || !description || !date) {
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
-    }
-
-    const newEvent = new Event({ title, description, date });
-    await newEvent.save();
-
-    res.json({ success: true, event: newEvent });
+    const result = await pool.query(
+      'INSERT INTO events (title, description, date) VALUES ($1, $2, $3) RETURNING *',
+      [title, description, date]
+    );
+    res.json({ success: true, event: result.rows[0] });
   } catch (err) {
-    console.error('Error saving event:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
+    res.status(500).json({ error: 'Server error saving event' });
   }
 });
 
-// 📌 Get all events
 app.get('/api/events', async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: -1 });
-    console.log("Admin event POST request received:", req.body);
-    res.json(events);
+    const result = await pool.query('SELECT * FROM events ORDER BY date DESC');
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Error fetching events' });
   }
 });
-// 📌 Get single event by ID (optional)
+
 app.get('/api/events/:id', async (req, res) => {
-  const { id } = req.params;
   try {
-    const event = await Event.findById(id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    res.json(event);
+    const result = await pool.query('SELECT * FROM events WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Error retrieving event' });
   }
 });
 
-// 📌 Update an event
 app.put('/api/events/:id', async (req, res) => {
-  const { id } = req.params;
-  const { title, date, description } = req.body;
-
-  if (!title || !date || !description) {
-    return res.status(400).json({ success: false, message: 'All fields required' });
-  }
+  const { title, description, date } = req.body;
+  if (!title || !description || !date) return res.status(400).json({ error: 'All fields required' });
 
   try {
-    const updatedEvent = await Event.findByIdAndUpdate(
-      id,
-      { title, date, description },
-      { new: true }
+    const result = await pool.query(
+      'UPDATE events SET title = $1, description = $2, date = $3 WHERE id = $4 RETURNING *',
+      [title, description, date, req.params.id]
     );
-
-    if (!updatedEvent) {
-      return res.status(404).json({ success: false, message: 'Event not found' });
-    }
-
-    res.json({ success: true, event: updatedEvent });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    res.json({ success: true, event: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Error updating event' });
+    res.status(500).json({ error: 'Error updating event' });
   }
 });
 
-// 📌 Delete an event
 app.delete('/api/events/:id', async (req, res) => {
-  const { id } = req.params;
-
   try {
-    const deleted = await Event.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'Event not found' });
-    }
-
-    res.json({ success: true, message: 'Event deleted' });
+    const result = await pool.query('DELETE FROM events WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Error deleting event' });
+    res.status(500).json({ error: 'Error deleting event' });
   }
 });
 
-// 📌 Get all media
-app.get('/api/media', async (req, res) => {
-  try {
-    const media = await Media.find().sort({ _id: -1 });
-    res.json(media);
-  } catch (err) {
-    res.status(500).json({ error: 'Error fetching media' });
-  }
-});
-
-// 📌 Upload media
+// 📌 Media Routes
 app.post('/api/media/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ext = path.extname(req.file.filename).toLowerCase();
   let type = 'unknown';
+  if ([".mp4", ".mov", ".avi", ".mkv", ".webm"].includes(ext)) type = 'video';
+  else if ([".mp3", ".wav", ".ogg", ".m4a"].includes(ext)) type = 'audio';
+  else if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].includes(ext)) type = 'image';
+  if (type === 'unknown') return res.status(400).json({ error: 'Unsupported file type' });
 
-  if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) {
-    type = 'video';
-  } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
-    type = 'audio';
-  } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].includes(ext)) {
-    type = 'image';
-  }
-  if (type === 'unknown') {
-    return res.status(400).json({ error: 'Unsupported file type' });
-  }
   const caption = req.body.caption || '';
-  const category = req.body.category || 'Uncategorized'; // 👈 Default fallback
+  const category = req.body.category || 'Uncategorized';
   const filePath = req.file.filename;
   const url = `http://localhost:${PORT}/uploads/${filePath}`;
 
   try {
-    const mediaItem = await Media.create({ url, type, caption, filePath, category });
-    res.json(mediaItem);
+    const result = await pool.query(
+      'INSERT INTO media (url, type, caption, filePath, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [url, type, caption, filePath, category]
+    );
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Failed to save media' });
   }
 });
 
-// Get all media under a category (caption group)
+app.get('/api/media', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM media ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error fetching media' });
+  }
+});
+
 app.get('/api/media/:category', async (req, res) => {
   try {
-    const category = req.params.category;
-    const media = await Media.find({ category });
-    res.json(media);
+    const result = await pool.query('SELECT * FROM media WHERE category = $1', [req.params.category]);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/categories
-app.get('/api/categories', (req, res) => {
-  const categories = [
-    'Stressed',
-    'Lonely',
-    'Anxious',
-    'Encouraged',
-    'Hopeful',
-    'Other'
-  ];
-  res.json(categories);
-});
 
-
-// 📌 Delete media
 app.post('/api/media/delete', async (req, res) => {
   const { filePath } = req.body;
-  if (!filePath) return res.status(400).json({ error: 'No filePath provided' });
-
+  if (!filePath) return res.status(400).json({ error: 'Missing filePath' });
   const fullPath = path.join(uploadsDir, filePath);
 
   try {
-    await Media.deleteOne({ filePath });
+    await pool.query('DELETE FROM media WHERE filePath = $1', [filePath]);
     fs.unlink(fullPath, err => {
-      if (err) return res.status(500).json({ error: 'Error deleting file from disk' });
+      if (err) return res.status(500).json({ error: 'Failed to delete file' });
       res.json({ success: true });
     });
   } catch (err) {
     res.status(500).json({ error: 'Error deleting media' });
   }
 });
-// 📌 Get all team members
-// ✅ GET /api/team
+
+// 📌 Team Routes
 app.get('/api/team', async (req, res) => {
   try {
-    const team = await TeamMember.find().sort({ createdAt: 1 });
-    res.json(team); // ✅ this must be a plain array
+    const result = await pool.query('SELECT * FROM team_members ORDER BY created_at ASC');
+    res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// 📌 Add a team member
 app.post('/api/team', upload.single('image'), async (req, res) => {
-  console.log('BODY:', req.body);
-console.log('FILE:', req.file);
+  const { name, title, bio } = req.body;
+  const imagePath = req.file ? `/uploads/${req.file.filename}` : '';
+  if (!name || !title || !bio) return res.status(400).json({ error: 'Name, title and bio required' });
 
   try {
-    const { name, title, bio } = req.body;
-    const imagePath = req.file ? `/uploads/${req.file.filename}` : ''; // Optional image
-
-    if (!name || !title || !bio) {
-      return res.status(400).json({ error: 'Name, title and bio are required' });
-    }
-
-    const newMember = new TeamMember({
-      name,
-      title,
-      image: imagePath,
-      bio,
-    });
-
-    await newMember.save();
-    res.status(201).json(newMember);
+    const result = await pool.query(
+      'INSERT INTO team_members (name, title, image, bio) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, title, imagePath, bio]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Team upload error:', err);
     res.status(500).json({ error: 'Error saving team member' });
   }
 });
-// 📌 Delete a team member
+
 app.delete('/api/team/:id', async (req, res) => {
   try {
-    const deleted = await TeamMember.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Team member not found' });
-
+    const result = await pool.query('DELETE FROM team_members WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Team member not found' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete member' });
+    res.status(500).json({ error: 'Error deleting team member' });
   }
 });
 
-// ✅ Start server
-app.listen(PORT, () =>
-  console.log(`✅ Server running at http://localhost:${PORT}`)
-);
+// 📌 Static Categories
+app.get('/api/categories', (req, res) => {
+  res.json(['Stressed', 'Lonely', 'Anxious', 'Encouraged', 'Hopeful', 'Other']);
+});
+
+// =======================
+// BLOG ROUTES
+// =======================
+
+// Create blog (Admin only)
+app.post('/api/blogs', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (auth !== 'Bearer admin-token') return res.status(403).json({ error: 'Unauthorized' });
+
+  const { title, content, image, author, tags } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO blogs (title, content, image, author, tags) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, content, image, author, tags]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating blog:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all blogs
+app.get('/api/blogs', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM blogs ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching blogs:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single blog
+app.get('/api/blogs/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM blogs WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Blog not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching blog:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update blog (Admin only)
+app.put('/api/blogs/:id', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (auth !== 'Bearer admin-token') return res.status(403).json({ error: 'Unauthorized' });
+
+  const { id } = req.params;
+  const { title, content, image, author, tags } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE blogs SET title = $1, content = $2, image = $3, author = $4, tags = $5 WHERE id = $6 RETURNING *',
+      [title, content, image, author, tags, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Blog not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating blog:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete blog (Admin only)
+app.delete('/api/blogs/:id', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (auth !== 'Bearer admin-token') return res.status(403).json({ error: 'Unauthorized' });
+
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM blogs WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Blog not found' });
+    res.json({ message: 'Blog deleted' });
+  } catch (err) {
+    console.error('Error deleting blog:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ✅ Start Server
+app.listen(PORT, () => {
+  console.log(`✅ Server running at http://localhost:${PORT}`);
+});
