@@ -5,6 +5,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const generateAccessToken = require('./mpesa');
+const { initiateStkPush } = require('./mpesa');
 
 const app = express();
 const PORT = 5000;
@@ -18,6 +20,13 @@ const pool = new Pool({
   password: 'your_secure_password', // ✅ replace with your password
   port: 5432,
 });
+const {
+  DARAJA_CONSUMER_KEY,
+  DARAJA_CONSUMER_SECRET,
+  BUSINESS_SHORT_CODE,
+  PASSKEY,
+  CALLBACK_URL
+} = process.env;
 
 pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
@@ -295,6 +304,48 @@ app.delete('/api/blogs/:id', async (req, res) => {
     console.error('Error deleting blog:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+
+app.get('/api/mpesa/token', async (req, res) => {
+  const token = await generateAccessToken();
+  if (token) {
+    res.json({ access_token: token });
+  } else {
+    res.status(500).json({ error: 'Failed to generate token' });
+  }
+});
+
+// 1. Get access token
+async function getAccessToken() {
+  const auth = Buffer.from(`${DARAJA_CONSUMER_KEY}:${DARAJA_CONSUMER_SECRET}`).toString('base64');
+  const res = await axios.get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials', {
+    headers: { Authorization: `Basic ${auth}` }
+  });
+  return res.data.access_token;
+}
+
+// 2. Universal Donation Endpoint
+app.post('/api/donate', async (req, res) => {
+  const { phone, amount } = req.body;
+
+  if (!phone || !amount) {
+    return res.status(400).json({ error: "Phone number and amount are required" });
+  }
+
+  const formattedPhone = phone.startsWith('254') ? phone : phone.replace(/^0/, '254');
+
+  const response = await initiateStkPush(formattedPhone, amount);
+  if (response) {
+    res.json(response);
+  } else {
+    res.status(500).json({ error: "Failed to initiate STK Push" });
+  }
+});
+// 3. Daraja Callback Endpoint (For now just log)
+app.post('/api/daraja/callback', (req, res) => {
+  console.log('Callback:', JSON.stringify(req.body, null, 2));
+  res.status(200).send('OK');
 });
 
 // ✅ Start Server
