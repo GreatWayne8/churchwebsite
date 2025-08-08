@@ -7,6 +7,8 @@ const path = require('path');
 const { Pool } = require('pg');
 const generateAccessToken = require('./mpesa');
 const { initiateStkPush } = require('./mpesa');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = 5000;
@@ -15,12 +17,13 @@ const stripe = require('stripe')('sk_test_51RsrPAPLkGrqoiEnxcEvS8iBg5tBWMmI1lwa1
 
 // ✅ PostgreSQL connection
 const pool = new Pool({
-  user: 'postgres', // ✅ change if needed
+  user: 'postgres', // 
   host: 'localhost',
   database: 'dmi',
-  password: 'your_secure_password', // ✅ replace with your password
+  password: 'your_secure_password',
   port: 5432,
 });
+
 const {
   DARAJA_CONSUMER_KEY,
   DARAJA_CONSUMER_SECRET,
@@ -32,12 +35,13 @@ const {
 pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
   .catch(err => console.error('❌ PostgreSQL connection error:', err));
-
+const JWT_SECRET = 'your_super_secret_key';
 // ✅ Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(uploadsDir));
+bcrypt.hash('secret2025', 10).then(console.log);
 
 // ✅ Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) {
@@ -125,6 +129,9 @@ app.delete('/api/events/:id', async (req, res) => {
 
 // 📌 Media Routes
 app.post('/api/media/upload', upload.single('file'), async (req, res) => {
+  console.log("BODY:", req.body);
+  console.log("FILE:", req.file);
+
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ext = path.extname(req.file.filename).toLowerCase();
@@ -132,6 +139,7 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
   if ([".mp4", ".mov", ".avi", ".mkv", ".webm"].includes(ext)) type = 'video';
   else if ([".mp3", ".wav", ".ogg", ".m4a"].includes(ext)) type = 'audio';
   else if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].includes(ext)) type = 'image';
+
   if (type === 'unknown') return res.status(400).json({ error: 'Unsupported file type' });
 
   const caption = req.body.caption || '';
@@ -146,6 +154,7 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error("Upload error:", err);
     res.status(500).json({ error: 'Failed to save media' });
   }
 });
@@ -411,6 +420,61 @@ app.post('/api/stripe-donate', async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
+
+// =================== Admin Register (One-time setup) ===================
+app.post('/admin/register', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.query(
+      'INSERT INTO admins (email, password) VALUES ($1, $2)',
+      [email, hashedPassword]
+    );
+    res.status(201).send('Admin registered successfully');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error registering admin');
+  }
+});
+
+// =================== Admin Login ===================
+app.post('/admin/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM admins WHERE email = $1', [email]);
+    const admin = result.rows[0];
+    if (!admin || !(await bcrypt.compare(password, admin.password))) {
+      return res.status(401).send('Invalid credentials');
+    }
+
+    const token = jwt.sign({ id: admin.id, email: admin.email }, JWT_SECRET, {
+      expiresIn: '1h',
+    });
+    res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Login error');
+  }
+});
+
+// =================== Middleware to Protect Admin Routes ===================
+function authenticateAdmin(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, admin) => {
+    if (err) return res.sendStatus(403);
+    req.admin = admin;
+    next();
+  });
+}
+
+// =================== Protected Admin Route ===================
+app.get('/admin', authenticateAdmin, (req, res) => {
+  res.send(`Hello ${req.admin.username}, this is a protected admin area`);
+});
+
 // ✅ Start Server
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
